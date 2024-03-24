@@ -1,3 +1,4 @@
+//go:build !embedTor
 // +build !embedTor
 
 package config
@@ -5,7 +6,7 @@ package config
 import (
 	"fmt"
 
-	"berty.tech/go-libp2p-tor-transport/internal/confStore"
+	"github.com/rish1988/go-libp2p-tor-transport/internal/confStore"
 )
 
 // EnableEmbeded setups the node to use a builtin tor node.

@@ -4,19 +4,18 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/libp2p/go-libp2p/core/network"
 	"strconv"
 	"sync"
 	"time"
 
-	"berty.tech/go-libp2p-tor-transport/config"
-	"berty.tech/go-libp2p-tor-transport/internal/confStore"
+	"github.com/rish1988/go-libp2p-tor-transport/config"
+	"github.com/rish1988/go-libp2p-tor-transport/internal/confStore"
 
 	"github.com/cretz/bine/tor"
 
-	"github.com/libp2p/go-libp2p-core/peer"
-	tpt "github.com/libp2p/go-libp2p-core/transport"
-	tptu "github.com/libp2p/go-libp2p-transport-upgrader"
-
+	"github.com/libp2p/go-libp2p/core/peer"
+	tpt "github.com/libp2p/go-libp2p/core/transport"
 	ma "github.com/multiformats/go-multiaddr"
 	mafmt "github.com/multiformats/go-multiaddr-fmt"
 	manet "github.com/multiformats/go-multiaddr/net"
@@ -31,7 +30,7 @@ type transport struct {
 
 	// Used to upgrade unsecure TCP connections to secure multiplexed and
 	// authenticate Tor connections.
-	upgrader *tptu.Upgrader
+	upgrader tpt.Upgrader
 
 	// if allowTcpDial is true the transport will accept to dial tcp address.
 	allowTcpDial bool
@@ -56,7 +55,7 @@ type listenHolder struct {
 	next *listenHolder
 }
 
-func NewBuilder(cs ...config.Configurator) (func(*tptu.Upgrader) tpt.Transport, error) {
+func NewBuilder(cs ...config.Configurator) (func(tpt.Upgrader) tpt.Transport, error) {
 	var conf confStore.Config
 	{
 		// Applying configuration
@@ -83,7 +82,7 @@ func NewBuilder(cs ...config.Configurator) (func(*tptu.Upgrader) tpt.Transport, 
 	if err != nil {
 		return nil, errorx.Decorate(err, "Can't create a dialer.")
 	}
-	return func(u *tptu.Upgrader) tpt.Transport {
+	return func(u tpt.Upgrader) tpt.Transport {
 		return &transport{
 			allowTcpDial: conf.AllowTcpDial,
 			setupTimeout: conf.SetupTimeout,
@@ -194,11 +193,11 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 			return nil, errorx.Decorate(err, "Can't dial")
 		}
 		// Upgrading
-		conn, err := t.upgrader.UpgradeOutbound(ctx, t, &dialConn{
+		conn, err := t.upgrader.Upgrade(ctx, t, &dialConn{
 			netConnWithoutAddr: c,
 			raddr:              raddr,
 			laddr:              &t.laddrs,
-		}, p)
+		}, network.DirOutbound, p, &network.NullScope{})
 		if err != nil {
 			return nil, errorx.Decorate(err, "Can't upgrade laddr exchange connection")
 		}
@@ -266,11 +265,11 @@ func (t *transport) dialTroughProxy(ctx context.Context, raddr ma.Multiaddr, add
 		return nil, errorx.Decorate(err, "Can't dial")
 	}
 	// Upgrading
-	conn, err := t.upgrader.UpgradeOutbound(ctx, t, &dialConnTcp{
+	conn, err := t.upgrader.Upgrade(ctx, t, &dialConnTcp{
 		netConnWithoutAddr: c,
 		raddr:              raddr,
 		laddr:              &t.laddrs,
-	}, p)
+	}, network.DirOutbound, p, &network.NullScope{})
 	if err != nil {
 		return nil, errorx.Decorate(err, "Can't upgrade connection")
 	}

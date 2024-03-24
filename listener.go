@@ -2,15 +2,15 @@ package tor
 
 import (
 	"context"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/opentracing/opentracing-go/log"
 	"net"
 	"strconv"
 	"sync"
 
 	"github.com/cretz/bine/tor"
 
-	tpt "github.com/libp2p/go-libp2p-core/transport"
-	tptu "github.com/libp2p/go-libp2p-transport-upgrader"
-
+	tpt "github.com/libp2p/go-libp2p/core/transport"
 	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/joomcode/errorx"
@@ -22,7 +22,7 @@ type listener struct {
 	cancel  func()
 	closer  sync.Once
 
-	upgrader *tptu.Upgrader
+	upgrader tpt.Upgrader
 	t        *transport
 
 	lAddrStore *listenStore
@@ -80,10 +80,13 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 		raddr:              NopMaddr2,
 	}
 
-	conn, err := l.upgrader.UpgradeInbound(
+	conn, err := l.upgrader.Upgrade(
 		l.ctx,
 		l.t,
 		maConn,
+		network.DirInbound,
+		NopMaddr3Str,
+		&network.NullScope{},
 	)
 	if err != nil {
 		return nil, errorx.Decorate(err, "Can't upgrade raddr exchange connection")
@@ -91,7 +94,10 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 
 	stream, err := conn.AcceptStream()
 	if err != nil {
-		conn.Close()
+		err2 := conn.Close()
+		if err2 != nil {
+			log.Error(err2)
+		}
 		return nil, errorx.Decorate(err, "Can't accept raddr exchange conn")
 	}
 
@@ -104,7 +110,10 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 		if err != nil {
 			// In this case terminate because there should be any reason this wouldn't
 			// work.
-			conn.Close()
+			err2 := conn.Close()
+			if err2 != nil {
+				log.Error(err)
+			}
 			return nil, errorx.Decorate(err, "Can't read raddr exchange stream")
 		}
 		if n != 0 {
@@ -128,7 +137,10 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 		if err != nil {
 			// In this case terminate because there should be any reason this wouldn't
 			// work.
-			conn.Close()
+			err2 := conn.Close()
+			if err2 != nil {
+				log.Error(err)
+			}
 			return nil, errorx.Decorate(err, "Can't read raddr exchange stream")
 		}
 		mbuf = append(mbuf, buf[:n]...)
